@@ -1,6 +1,6 @@
 /**
  * Pattern Vector Service
- * 
+ *
  * Handles pattern-specific Vector DB operations
  * Extends BaseVectorService for organizational patterns
  */
@@ -9,13 +9,23 @@ import { VectorDBService } from './vector-db-service';
 import { OrganizationalPattern } from './pattern-types';
 import { EmbeddingService } from './embedding-service';
 import { BaseVectorService, BaseSearchOptions, BaseSearchResult } from './base-vector-service';
+import { resolveProjectKey } from './project-scope-resolver';
 
 export interface PatternSearchOptions extends BaseSearchOptions {}
 export interface PatternSearchResult extends BaseSearchResult<OrganizationalPattern> {}
 
+function collectionNamespace(): string {
+  const key = resolveProjectKey();
+  return `patterns_${key}`;
+}
+
 export class PatternVectorService extends BaseVectorService<OrganizationalPattern> {
+  private readonly projectKey: string;
+
   constructor(vectorDB?: VectorDBService, embeddingService?: EmbeddingService) {
-    super('patterns', vectorDB, embeddingService);
+    const namespace = collectionNamespace();
+    super(namespace, vectorDB, embeddingService);
+    this.projectKey = resolveProjectKey();
   }
 
   // Implement abstract methods from BaseVectorService
@@ -37,7 +47,8 @@ export class PatternVectorService extends BaseVectorService<OrganizationalPatter
       suggestedResources: pattern.suggestedResources,
       rationale: pattern.rationale,  
       createdAt: pattern.createdAt,
-      createdBy: pattern.createdBy
+      createdBy: pattern.createdBy,
+      projectKey: this.projectKey
     };
   }
 

@@ -693,3 +693,28 @@ A: The system is tested with 100+ patterns. Qdrant can scale to much larger volu
 <!-- dotai-test-hint: Clean up Qdrant container after testing: docker stop qdrant-testing && docker rm qdrant-testing -->
 
 *This guide covers Pattern Management v1.0. Features like pattern analytics, approval workflows, and advanced pattern organization are planned for future versions.*
+
+## Project-level scoping (automatic)
+
+Patterns are isolated per project automatically.
+
+How it determines the project:
+1. Git remote origin → owner/repo (e.g., org/repo → org-repo)
+2. Monorepo subproject (nearest package.json, go.mod, pyproject.toml, Cargo.toml) → appended as a suffix (e.g., org-repo--packages-api)
+3. Fallback when Git isn't available → directory name + short hash
+
+Override:
+- To force a specific scope, set:
+```bash
+export DOTAI_PROJECT_KEY="my-scope"
+```
+
+Why default to flat scoping?
+- Determinism and simplicity: No surprises from org/global patterns.
+- Operational safety: Prevents cross-project drift or outdated org defaults from influencing local results.
+- Performance: Single-scope queries are faster and easier to reason about.
+
+Alternative: hierarchical scoping (optional, future)
+- Rationale for enabling: Organization-wide guardrails and proven patterns can be reused across projects; better defaults for new teams.
+- Trade-offs: Requires weights/precedence, increases latency, and may surprise users if broader scopes outrank local ones.
+- Implementation path: Store projectKey in vector payloads now; later, query multiple scopes with metadata filters and re-rank with weights (e.g., subproject=1.0, repo=0.85, org=0.7, global=0.5) and show an "explain why" section listing applied scopes.

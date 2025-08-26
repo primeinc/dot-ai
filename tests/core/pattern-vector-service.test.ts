@@ -6,15 +6,18 @@ import { PatternVectorService, PatternSearchOptions } from '../../src/core/patte
 import { VectorDBService } from '../../src/core/vector-db-service';
 import { EmbeddingService } from '../../src/core/embedding-service';
 import { OrganizationalPattern } from '../../src/core/pattern-types';
+import { resolveProjectKey } from '../../src/core/project-scope-resolver';
 
-// Mock VectorDBService and EmbeddingService
+// Mock VectorDBService, EmbeddingService, and project scope resolver
 jest.mock('../../src/core/vector-db-service');
 jest.mock('../../src/core/embedding-service');
+jest.mock('../../src/core/project-scope-resolver');
 
 describe('PatternVectorService', () => {
   let patternService: PatternVectorService;
   let mockVectorDB: jest.Mocked<VectorDBService>;
   let mockEmbeddingService: jest.Mocked<EmbeddingService>;
+  let mockResolveProjectKey: jest.MockedFunction<typeof resolveProjectKey>;
 
   const samplePattern: OrganizationalPattern = {
     id: 'pattern-1',
@@ -28,6 +31,11 @@ describe('PatternVectorService', () => {
 
   beforeEach(() => {
     mockVectorDB = new VectorDBService({ url: 'test-url' }) as jest.Mocked<VectorDBService>;
+    mockEmbeddingService = new EmbeddingService() as jest.Mocked<EmbeddingService>;
+    mockResolveProjectKey = resolveProjectKey as jest.MockedFunction<typeof resolveProjectKey>;
+    
+    // Default mock for project key resolution
+    mockResolveProjectKey.mockReturnValue('test-owner-test-repo');
     mockEmbeddingService = new EmbeddingService() as jest.Mocked<EmbeddingService>;
     
     // Mock embedding service to be available by default
@@ -55,6 +63,45 @@ describe('PatternVectorService', () => {
 
     // Reset all mocks
     jest.clearAllMocks();
+  });
+
+  describe('Project Scoping', () => {
+    it('should use project-scoped collection name', () => {
+      // The constructor should have been called with the project-scoped collection name
+      expect(mockVectorDB.constructor).toHaveBeenCalledWith({ collectionName: 'patterns_test-owner-test-repo' });
+    });
+
+    it('should include projectKey in stored payloads', async () => {
+      mockVectorDB.upsertDocument.mockResolvedValue();
+
+      await patternService.storePattern(samplePattern);
+
+      expect(mockVectorDB.upsertDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            projectKey: 'test-owner-test-repo'
+          })
+        })
+      );
+    });
+
+    it('should handle different project keys for different services', () => {
+      // Test that different project keys result in different collection names
+      mockResolveProjectKey.mockReturnValueOnce('different-project');
+      
+      const service2 = new PatternVectorService(mockVectorDB, mockEmbeddingService);
+      
+      // Should be called with different collection name
+      expect(mockVectorDB.constructor).toHaveBeenCalledWith({ collectionName: 'patterns_different-project' });
+    });
+
+    it('should handle monorepo subproject scoping', () => {
+      mockResolveProjectKey.mockReturnValueOnce('myorg-monorepo--packages-api');
+      
+      const service = new PatternVectorService(mockVectorDB, mockEmbeddingService);
+      
+      expect(mockVectorDB.constructor).toHaveBeenCalledWith({ collectionName: 'patterns_myorg-monorepo--packages-api' });
+    });
   });
 
   describe('Initialization', () => {
@@ -89,6 +136,7 @@ describe('PatternVectorService', () => {
           rationale: 'Provides automatic scaling based on CPU usage',
           createdAt: '2025-01-30T12:00:00Z',
           createdBy: 'test-user',
+          projectKey: 'test-owner-test-repo',
           searchText: expect.stringContaining('horizontal scaling pattern'),
           hasEmbedding: true
         },
